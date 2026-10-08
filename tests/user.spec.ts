@@ -91,6 +91,17 @@ async function loginAsDiner(page: Page) {
   await submitDinerLogin(page);
 }
 
+async function mockFailedLogin(page: Page) {
+  await page.route('*/**/api/auth', async (route) => {
+    if (route.request().method() === 'PUT') {
+      await route.fulfill({ status: 401, json: { message: 'Unauthorized' } });
+      return;
+    }
+
+    await route.fallback();
+  });
+}
+
 async function mockLogout(page: Page) {
   await page.route('*/**/api/auth', async (route) => {
     if (route.request().method() === 'DELETE') {
@@ -107,6 +118,19 @@ test('login', async ({ page }) => {
   await loginAsDiner(page);
 
   await expect(page.getByRole('link', { name: 'KC' })).toBeVisible();
+});
+
+test('login fails with invalid credentials', async ({ page }) => {
+  await basicInit(page);
+  await mockFailedLogin(page);
+  await page.getByRole('link', { name: 'Login' }).click();
+  await page.getByPlaceholder('Email address').fill('unknown@jwt.com');
+  await page.getByPlaceholder('Password').fill('wrong-password');
+  await page.getByRole('button', { name: 'Login' }).click();
+
+  await expect(page.getByRole('main')).toContainText('{"code":401,"message":"Unauthorized"}');
+  await expect(page.getByRole('link', { name: 'Login', exact: true })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'KC' })).toHaveCount(0);
 });
 
 test('purchase with login', async ({ page }) => {
