@@ -91,6 +91,16 @@ async function loginAsDiner(page: Page) {
   await submitDinerLogin(page);
 }
 
+async function openDinerCheckout(page: Page) {
+  await page.getByRole('button', { name: 'Order now' }).click();
+  await page.getByRole('combobox').selectOption('4');
+  await page.getByRole('link', { name: 'Image Description Veggie A' }).click();
+  await page.getByRole('link', { name: 'Image Description Pepperoni' }).click();
+  await page.getByRole('button', { name: 'Checkout' }).click();
+  await submitDinerLogin(page);
+  await expect(page.getByRole('button', { name: 'Pay now' })).toBeVisible();
+}
+
 async function mockFailedLogin(page: Page) {
   await page.route('*/**/api/auth', async (route) => {
     if (route.request().method() === 'PUT') {
@@ -131,6 +141,54 @@ test('login fails with invalid credentials', async ({ page }) => {
   await expect(page.getByRole('main')).toContainText('{"code":401,"message":"Unauthorized"}');
   await expect(page.getByRole('link', { name: 'Login', exact: true })).toBeVisible();
   await expect(page.getByRole('link', { name: 'KC' })).toHaveCount(0);
+});
+
+test('payment fails when order submission is rejected', async ({ page }) => {
+  await basicInit(page);
+  await page.route('*/**/api/order', async (route) => {
+    if (route.request().method() === 'POST') {
+      await route.fulfill({ status: 500, json: { message: 'Payment unavailable' } });
+      return;
+    }
+
+    await route.fallback();
+  });
+  await openDinerCheckout(page);
+  await page.getByRole('button', { name: 'Pay now' }).click();
+
+  await expect(page.getByRole('main')).toContainText('Payment unavailable');
+  await expect(page.getByRole('heading', { name: 'So worth it' })).toBeVisible();
+});
+
+test('delivery shows an error when JWT verification fails', async ({ page }) => {
+  await basicInit(page);
+  await page.route('**/api/order/verify', async (route) => {
+    expect(route.request().method()).toBe('POST');
+    expect(route.request().postDataJSON()).toMatchObject({ jwt: 'eyJpYXQ' });
+    await route.fulfill({ status: 401, json: { message: 'Invalid order token' } });
+  });
+  await openDinerCheckout(page);
+  await page.getByRole('button', { name: 'Pay now' }).click();
+  await expect(page.getByRole('heading', { name: 'Here is your JWT Pizza!' })).toBeVisible();
+  await page.getByRole('button', { name: 'Verify' }).click();
+
+  await expect(page.getByText('JWT Pizza - invalid')).toBeVisible();
+  await expect(page.getByText('invalid JWT. Looks like you have a bad pizza!')).toBeVisible();
+});
+
+test('expired saved session logs the user out', async ({ page }) => {
+  await page.addInitScript(() => {
+    window.localStorage.setItem('token', 'expired-token');
+  });
+  await page.route('*/**/api/user/me', async (route) => {
+    expect(route.request().method()).toBe('GET');
+    await route.fulfill({ status: 401, json: { message: 'Unauthorized' } });
+  });
+  await page.goto('/');
+
+  await expect(page.getByRole('link', { name: 'Login', exact: true })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'KC' })).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => window.localStorage.getItem('token'))).toBeNull();
 });
 
 test('purchase with login', async ({ page }) => {
