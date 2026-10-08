@@ -69,12 +69,42 @@ async function basicInit(page: Page) {
   await page.goto('/');
 }
 
+async function mockOrderHistory(page: Page) {
+  await page.route('*/**/api/order', async (route) => {
+    if (route.request().method() === 'GET') {
+      await route.fulfill({ json: { id: '3', dinerId: '3', orders: [] } });
+      return;
+    }
+
+    await route.fallback();
+  });
+}
+
+async function submitDinerLogin(page: Page) {
+  await page.getByPlaceholder('Email address').fill('d@jwt.com');
+  await page.getByPlaceholder('Password').fill('a');
+  await page.getByRole('button', { name: 'Login' }).click();
+}
+
+async function loginAsDiner(page: Page) {
+  await page.getByRole('link', { name: 'Login' }).click();
+  await submitDinerLogin(page);
+}
+
+async function mockLogout(page: Page) {
+  await page.route('*/**/api/auth', async (route) => {
+    if (route.request().method() === 'DELETE') {
+      await route.fulfill({ json: {} });
+      return;
+    }
+
+    await route.fallback();
+  });
+}
+
 test('login', async ({ page }) => {
   await basicInit(page);
-  await page.getByRole('link', { name: 'Login' }).click();
-  await page.getByRole('textbox', { name: 'Email address' }).fill('d@jwt.com');
-  await page.getByRole('textbox', { name: 'Password' }).fill('a');
-  await page.getByRole('button', { name: 'Login' }).click();
+  await loginAsDiner(page);
 
   await expect(page.getByRole('link', { name: 'KC' })).toBeVisible();
 });
@@ -91,9 +121,7 @@ test('purchase with login', async ({ page }) => {
   await expect(page.locator('form')).toContainText('Selected pizzas: 2');
   await page.getByRole('button', { name: 'Checkout' }).click();
 
-  await page.getByPlaceholder('Email address').fill('d@jwt.com');
-  await page.getByPlaceholder('Password').fill('a');
-  await page.getByRole('button', { name: 'Login' }).click();
+  await submitDinerLogin(page);
 
   await expect(page.getByRole('main')).toContainText('Send me those 2 pizzas right now!');
   await expect(page.locator('tbody')).toContainText('Veggie');
@@ -102,4 +130,34 @@ test('purchase with login', async ({ page }) => {
   await page.getByRole('button', { name: 'Pay now' }).click();
 
   await expect(page.getByText('0.008')).toBeVisible();
+});
+
+test('view profile', async ({ page }) => {
+  await basicInit(page);
+  await mockOrderHistory(page);
+  await loginAsDiner(page);
+  await page.getByRole('link', { name: 'KC' }).click();
+  await expect(page.getByRole('list')).toContainText('diner-dashboard');
+  await expect(page.getByRole('main')).toContainText('d@jwt.com');
+  await expect(page.getByRole('img', { name: 'Employee stock photo' })).toBeVisible();
+});
+
+test('view franchise', async ({ page }) => {
+  await page.goto('http://localhost:5173/');
+  await page.getByRole('navigation', { name: 'Global' }).getByRole('link', { name: 'Franchise' }).click();
+  await expect(page.getByRole('main')).toContainText('So you want a piece of the pie?');
+  await expect(page.getByRole('main')).toContainText('Are you ready to embark on a journey towards unimaginable wealth? Owning a franchise with JWT Pizza is your ticket to financial success. With our proven business model and strong brand recognition, you have the opportunity to generate substantial revenue. Imagine the thrill of watching your profits soar year after year, as customers flock to your JWT Pizza, craving our mouthwatering creations.');
+  await expect(page.getByRole('alert')).toContainText('If you are already a franchisee, pleaseloginusing your franchise account');
+});
+
+test('logout', async ({ page }) => {
+  await basicInit(page);
+  await mockLogout(page);
+  await loginAsDiner(page);
+
+  const logoutRequest = page.waitForRequest((request) => request.url().endsWith('/api/auth') && request.method() === 'DELETE');
+  await page.getByRole('link', { name: 'Logout' }).click();
+  await logoutRequest;
+  await expect(page.getByRole('link', { name: 'Login' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'KC' })).toHaveCount(0);
 });
