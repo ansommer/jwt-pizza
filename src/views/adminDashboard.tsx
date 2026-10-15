@@ -15,6 +15,7 @@ export default function AdminDashboard(props: Props) {
   const navigate = useNavigate();
   const [franchiseList, setFranchiseList] = React.useState<FranchiseList>({ franchises: [], more: false });
   const [userList, setUserList] = React.useState<UserList>({ users: [] });
+  const [userDeleteError, setUserDeleteError] = React.useState('');
   const [franchisePage, setFranchisePage] = React.useState(0);
   const filterFranchiseRef = React.useRef<HTMLInputElement>(null);
 
@@ -44,6 +45,21 @@ export default function AdminDashboard(props: Props) {
 
   async function filterFranchises() {
     setFranchiseList(await pizzaService.getFranchises(franchisePage, 10, `*${filterFranchiseRef.current?.value}*`));
+  }
+
+  async function deleteUser(user: User) {
+    if (!user.id) {
+      setUserDeleteError('Cannot delete a user without an ID.');
+      return;
+    }
+
+    try {
+      await pizzaService.deleteUser(user.id);
+      setUserList((current) => ({ ...current, users: current.users.filter((listedUser) => listedUser.id !== user.id) }));
+      setUserDeleteError('');
+    } catch (error) {
+      setUserDeleteError(error instanceof Error ? error.message : JSON.stringify(error) ?? 'Unable to delete user.');
+    }
   }
 
   let response = <NotFound />;
@@ -132,6 +148,7 @@ export default function AdminDashboard(props: Props) {
         </div>
         <div className="text-start py-8 px-4 sm:px-6 lg:px-8">
           <h3 className="text-neutral-100 text-xl">Users</h3>
+          {userDeleteError && <div role="alert" className="text-red-300">{userDeleteError}</div>}
           <div className="bg-neutral-100 overflow-clip my-4">
             <div className="flex flex-col">
               <div className="-m-1.5 overflow-x-auto">
@@ -154,7 +171,7 @@ export default function AdminDashboard(props: Props) {
                             <td className="text-start px-2 whitespace-nowrap text-sm text-gray-800">{user.email}</td>
                             <td className="text-start px-2 whitespace-nowrap text-sm text-gray-800">{user.roles?.map(({ role }) => role).join(', ')}</td>
                             <td className="px-6 py-1 whitespace-nowrap text-end text-sm font-medium">
-                              <button type="button" className="px-2 py-1 inline-flex items-center gap-x-2 text-sm font-semibold rounded-lg border border-orange-400 text-orange-400 hover:border-orange-800 hover:text-orange-800">
+                              <button type="button" className="px-2 py-1 inline-flex items-center gap-x-2 text-sm font-semibold rounded-lg border border-orange-400 text-orange-400 hover:border-orange-800 hover:text-orange-800" onClick={() => deleteUser(user)}>
                                 <TrashIcon />
                                 Delete
                               </button>
