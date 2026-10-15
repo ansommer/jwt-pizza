@@ -163,3 +163,30 @@ test('list users', async ({ page }) => {
   await expect(userTable).toContainText('franchisee');
   await expect(userTable).not.toContainText('LotaPizza');
 });
+
+test('shows a delete button next to each user', async ({ page }) => {
+  await adminInit(page);
+
+  await page.route(/\/api\/user(?:\?.*)?$/, async (route) => {
+    expect(route.request().method()).toBe('GET');
+    await route.fulfill({
+      json: {
+        users: [
+          { id: '6', name: 'Diner Person', email: 'diner@jwt.com', roles: [{ role: Role.Diner }] },
+          { id: '7', name: 'Franchise Owner', email: 'owner@jwt.com', roles: [{ role: Role.Franchisee }] },
+        ],
+      },
+    });
+  });
+
+  await page.getByRole('link', { name: 'Login' }).click();
+  await page.getByPlaceholder('Email address').fill('a@jwt.com');
+  await page.getByPlaceholder('Password').fill('c');
+  await page.getByRole('button', { name: 'Login' }).click();
+  await page.getByRole('link', { name: 'Admin' }).click();
+
+  for (const email of ['diner@jwt.com', 'owner@jwt.com']) {
+    const userRow = page.getByRole('row').filter({ hasText: email });
+    await expect(userRow.getByRole('button', { name: 'Delete' })).toHaveCount(1);
+  }
+});
