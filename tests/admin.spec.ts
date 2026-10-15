@@ -124,3 +124,36 @@ test('delete a franchise', async ({ page }) => {
   await deleteRequest;
   await expect(page.getByRole('main')).toContainText("Mama Ricci's kitchen");
 });
+
+test('list users', async ({ page }) => {
+  await adminInit(page);
+
+  await page.route(/\/api\/user(?:\?.*)?$/, async (route) => {
+    expect(route.request().method()).toBe('GET');
+    await route.fulfill({
+      json: {
+        users: [
+          { id: '6', name: 'Diner Person', email: 'diner@jwt.com', roles: [{ role: Role.Diner }] },
+          { id: '7', name: 'Franchise Owner', email: 'owner@jwt.com', roles: [{ role: Role.Franchisee }] },
+        ],
+      },
+    });
+  });
+
+  await page.getByRole('link', { name: 'Login' }).click();
+  await page.getByPlaceholder('Email address').fill('a@jwt.com');
+  await page.getByPlaceholder('Password').fill('c');
+  await page.getByRole('button', { name: 'Login' }).click();
+  await page.getByRole('link', { name: 'Admin' }).click();
+
+  await expect(page.getByRole('heading', { name: 'Users' })).toBeVisible();
+
+  const userTable = page.getByRole('table').filter({ hasText: 'diner@jwt.com' });
+  await expect(userTable).toContainText('Diner Person');
+  await expect(userTable).toContainText('diner@jwt.com');
+  await expect(userTable).toContainText('diner');
+  await expect(userTable).toContainText('Franchise Owner');
+  await expect(userTable).toContainText('owner@jwt.com');
+  await expect(userTable).toContainText('franchisee');
+  await expect(userTable).not.toContainText('LotaPizza');
+});
