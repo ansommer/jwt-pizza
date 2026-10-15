@@ -28,6 +28,11 @@ async function adminInit(page: Page) {
     await route.fulfill({ json: loggedInUser });
   });
 
+  await page.route(/\/api\/user(?:\?.*)?$/, async (route) => {
+    expect(route.request().method()).toBe('GET');
+    await route.fulfill({ json: { users: [] } });
+  });
+
   await page.route(/\/api\/franchise(?:\?.*)?$/, async (route) => {
     expect(route.request().method()).toBe('GET');
     await route.fulfill({
@@ -66,10 +71,11 @@ test('view admin page', async ({ page }) => {
   await page.getByRole('link', { name: 'Admin' }).click();
 
   await expect(page.getByRole('main')).toContainText("Mama Ricci's kitchen");
-  await expect(page.getByRole('table')).toContainText('LotaPizza');
-  await expect(page.getByRole('table')).toContainText('PizzaCorp');
-  await expect(page.getByRole('table')).toContainText('Lehi');
-  await expect(page.getByRole('table')).toContainText('12.5 ₿');
+  const franchiseTable = page.getByRole('table').filter({ hasText: 'LotaPizza' });
+  await expect(franchiseTable).toContainText('LotaPizza');
+  await expect(franchiseTable).toContainText('PizzaCorp');
+  await expect(franchiseTable).toContainText('Lehi');
+  await expect(franchiseTable).toContainText('12.5 ₿');
 });
 
 test('create a franchise', async ({ page }) => {
