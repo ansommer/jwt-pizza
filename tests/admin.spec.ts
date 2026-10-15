@@ -190,3 +190,37 @@ test('shows a delete button next to each user', async ({ page }) => {
     await expect(userRow.getByRole('button', { name: 'Delete' })).toHaveCount(1);
   }
 });
+
+test('deletes a user', async ({ page }) => {
+  await adminInit(page);
+
+  await page.route(/\/api\/user(?:\?.*)?$/, async (route) => {
+    expect(route.request().method()).toBe('GET');
+    await route.fulfill({
+      json: {
+        users: [
+          { id: '6', name: 'Diner Person', email: 'diner@jwt.com', roles: [{ role: Role.Diner }] },
+          { id: '7', name: 'Franchise Owner', email: 'owner@jwt.com', roles: [{ role: Role.Franchisee }] },
+        ],
+      },
+    });
+  });
+  await page.route('*/**/api/user/6', async (route) => {
+    expect(route.request().method()).toBe('DELETE');
+    await route.fulfill({ json: { message: 'user deleted' } });
+  });
+
+  await page.getByRole('link', { name: 'Login' }).click();
+  await page.getByPlaceholder('Email address').fill('a@jwt.com');
+  await page.getByPlaceholder('Password').fill('c');
+  await page.getByRole('button', { name: 'Login' }).click();
+  await page.getByRole('link', { name: 'Admin' }).click();
+
+  const dinerRow = page.getByRole('row').filter({ hasText: 'diner@jwt.com' });
+  const deleteRequest = page.waitForRequest((request) => request.url().endsWith('/api/user/6') && request.method() === 'DELETE');
+  await dinerRow.getByRole('button', { name: 'Delete' }).click();
+  await deleteRequest;
+
+  await expect(page.getByRole('row').filter({ hasText: 'diner@jwt.com' })).toHaveCount(0);
+  await expect(page.getByRole('row').filter({ hasText: 'owner@jwt.com' })).toHaveCount(1);
+});
