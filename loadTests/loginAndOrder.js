@@ -9,7 +9,7 @@ export const options = {
   },
   thresholds: {},
   scenarios: {
-    Imported_HAR: {
+    loginAndOrder: {
       executor: 'ramping-vus',
       gracefulStop: '30s',
       stages: [
@@ -19,12 +19,12 @@ export const options = {
         { target: 0, duration: '30s' },
       ],
       gracefulRampDown: '30s',
-      exec: 'imported_HAR',
+      exec: 'loginAndOrder',
     },
   },
 }
 
-export function imported_HAR() {
+export function loginAndOrder() {
   let response
 
   const vars = {}
@@ -48,7 +48,7 @@ export function imported_HAR() {
       'sec-fetch-site': 'same-site',
     },
   })
-  if (!check(response, { 'status equals 200': (response) => response.status.toString() === '200' })) {
+  if (!check(response, { 'Login status equals 200': (response) => response.status.toString() === '200' })) {
     console.log(response.body);
     fail('Login was *not* 200');
   }
@@ -146,6 +146,10 @@ export function imported_HAR() {
       },
     }
   )
+  if (!check(response, { 'Purchase status equals 200': (response) => response.status.toString() === '200' })) {
+    console.log(response.body);
+    fail('Order was *not* 200');
+  }
 
   vars['jwt'] = jsonpath.query(response.json(), '$.jwt')[0]
 
@@ -176,4 +180,9 @@ export function imported_HAR() {
       },
     }
   )
+
+  if (!check(response, { 'pizza JWT is valid': (response) => response.status === 200 && response.json('message') === 'valid',})) {
+    console.log(response.body);
+    fail('Pizza JWT verification failed');
+  }
 }
